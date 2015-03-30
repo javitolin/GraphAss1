@@ -10,6 +10,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
+#include <iostream>
 GLuint texture;
 GLubyte *pic;
 unsigned char header[54];
@@ -17,7 +18,9 @@ GLuint dataPos;
 GLuint width, height;
 GLuint imageSize;
 unsigned char * data;
+unsigned char * edges;
 char * filename;
+using namespace std;
 GLuint loadTexture() {
 	FILE *f;
 	f = fopen(filename, "rb");
@@ -40,30 +43,69 @@ GLuint loadTexture() {
 	if (dataPos == 0)
 		dataPos = 54;
 	data = new unsigned char[imageSize];
+	edges = new unsigned char[imageSize];
 	fread(data, 1, imageSize, f);
 	fclose(f);
+
 	GLuint textureID;
 	glGenTextures(1, &textureID);
 	glBindTexture(GL_TEXTURE_2D, textureID);
-
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_LUMINANCE,
 	GL_UNSIGNED_BYTE, data);
 	glEnable(GL_TEXTURE_2D);
 	return textureID;
 }
+GLuint applyEdgeFilter(){
+	int gxSobel[3][3] = {{-1,0,1},{-2,0,2},{-1,0,1}};
+	int gySobel[3][3] = {{1,2,1},{0,0,0},{-1,-2,-1}};
+	GLuint threshold = 150;
+	for(GLuint i = 0; i < width; i++){
+		for(GLuint j = 0; j < height; j++){
+			edges[i+j*width] = data[i+j*width];
+			if(edges[i+j*width] > threshold) edges[i+j*width] = 255;
+			else edges[i+j*width] = 0;
+		}
+	}
+	for(GLuint i = 0; i < width; i++){
+		for(GLuint j = 0; j < height; j++){
+			int sobelXPixel = 0, sobelYPixel = 0;
 
+			for(GLint sobelx = -1; sobelx < 2; sobelx++){
+				for(GLint sobely = -1; sobely < 2; sobely++){
+					if(i > 0 && j > 0 && i < width - 2 && j < height - 2){
+						sobelXPixel += (gxSobel[sobelx+1][sobely+1]*edges[(i+sobelx)+(j+sobely)*width])/8;
+						sobelYPixel += (gySobel[sobelx+1][sobely+1]*edges[(i+sobelx)+(j+sobely)*width])/8;
+					}
+				}
+			}
+			int sobelAns = sqrt(pow(sobelXPixel,2) + pow(sobelYPixel,2));
+			edges[i+j*width] = min(sobelAns,255);
+			edges[i+j*width] = max(sobelAns,0);
+		}
+	}
+	GLuint textureID;
+	glGenTextures(1, &textureID);
+	glBindTexture(GL_TEXTURE_2D, textureID);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_LUMINANCE,
+	GL_UNSIGNED_BYTE, edges);
+	return textureID;
+}
 void mydisplay(void) {
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
 
 	//BOTTOM LEFT
 	glViewport(0, 0, 256, 256);
-	glBindTexture(GL_TEXTURE_2D, texture);
-
+	GLuint edgeTexture = applyEdgeFilter();
+	glBindTexture(GL_TEXTURE_2D, edgeTexture);
 	glBegin(GL_QUADS);
 	glTexCoord2f(1, 1);
 	glVertex2f(-1, 1);
@@ -77,6 +119,7 @@ void mydisplay(void) {
 
 	//BOTTOM RIGHT
 	glViewport(256, 0, 256, 256);
+	glBindTexture(GL_TEXTURE_2D, texture);
 	glBegin(GL_QUADS);
 	glTexCoord2f(1, 1);
 	glVertex2f(-1, 1);
@@ -123,7 +166,6 @@ void init() {
 
 	glOrtho(-1.0, 1.0, -1.0, 1.0, 2.0, -2.0);
 	texture = loadTexture();
-	printf("Texture: %d\n", texture);
 	glutDisplayFunc(mydisplay);
 	glutMainLoop();
 }
