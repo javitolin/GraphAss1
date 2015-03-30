@@ -62,29 +62,28 @@ GLuint loadTexture() {
 GLuint applyEdgeFilter(){
 	int gxSobel[3][3] = {{-1,0,1},{-2,0,2},{-1,0,1}};
 	int gySobel[3][3] = {{1,2,1},{0,0,0},{-1,-2,-1}};
-	GLuint threshold = 150;
 	for(GLuint i = 0; i < width; i++){
 		for(GLuint j = 0; j < height; j++){
 			edges[i+j*width] = data[i+j*width];
-			if(edges[i+j*width] > threshold) edges[i+j*width] = 255;
-			else edges[i+j*width] = 0;
 		}
 	}
 	for(GLuint i = 0; i < width; i++){
 		for(GLuint j = 0; j < height; j++){
 			int sobelXPixel = 0, sobelYPixel = 0;
 
-			for(GLint sobelx = -1; sobelx < 2; sobelx++){
-				for(GLint sobely = -1; sobely < 2; sobely++){
+			for(GLint sobelx = 0; sobelx < 3; sobelx++){
+				for(GLint sobely = 0; sobely < 3; sobely++){
 					if(i > 0 && j > 0 && i < width - 2 && j < height - 2){
-						sobelXPixel += (gxSobel[sobelx+1][sobely+1]*edges[(i+sobelx)+(j+sobely)*width])/8;
-						sobelYPixel += (gySobel[sobelx+1][sobely+1]*edges[(i+sobelx)+(j+sobely)*width])/8;
+						sobelXPixel += (gxSobel[sobelx][sobely]*edges[(i+sobelx)+(j+sobely)*width]);
+						sobelYPixel += (gySobel[sobelx][sobely]*edges[(i+sobelx)+(j+sobely)*width]);
 					}
 				}
 			}
-			int sobelAns = sqrt(pow(sobelXPixel,2) + pow(sobelYPixel,2));
-			edges[i+j*width] = min(sobelAns,255);
-			edges[i+j*width] = max(sobelAns,0);
+			GLuint threshold = 150;
+			GLuint val = sqrt(pow(sobelXPixel,2) + pow(sobelYPixel,2));
+			if(val > threshold) val = 255;
+			else val = 0;
+			edges[i+j*width] = val;
 		}
 	}
 	GLuint textureID;
@@ -103,9 +102,8 @@ void mydisplay(void) {
 	glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
 
 	//BOTTOM LEFT
+	glBindTexture(GL_TEXTURE_2D, texture);
 	glViewport(0, 0, 256, 256);
-	GLuint edgeTexture = applyEdgeFilter();
-	glBindTexture(GL_TEXTURE_2D, edgeTexture);
 	glBegin(GL_QUADS);
 	glTexCoord2f(1, 1);
 	glVertex2f(-1, 1);
@@ -119,7 +117,6 @@ void mydisplay(void) {
 
 	//BOTTOM RIGHT
 	glViewport(256, 0, 256, 256);
-	glBindTexture(GL_TEXTURE_2D, texture);
 	glBegin(GL_QUADS);
 	glTexCoord2f(1, 1);
 	glVertex2f(-1, 1);
@@ -145,6 +142,8 @@ void mydisplay(void) {
 	glEnd();
 
 	//TOP RIGHT
+	GLuint edgeTexture = applyEdgeFilter();
+	glBindTexture(GL_TEXTURE_2D, edgeTexture);
 	glViewport(256, 256, 256, 256);
 	glBegin(GL_QUADS);
 	glTexCoord2f(1, 1);
